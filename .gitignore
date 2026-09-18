@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.zip
+
+# Local machine paths — copy from environment.props.example
+environment.props
+
+# Build / local playtest copy — not source history
+plugins/

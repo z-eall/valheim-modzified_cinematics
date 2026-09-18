@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "node ../../.cursor/hooks/guard-mod-feature-build.js",
+        "matcher": "Shell",
+        "failClosed": false
+      },
+      {
+        "command": "node ../../.cursor/hooks/guard-publicized-assemblies-freshness.js",
+        "matcher": "Shell",
+        "failClosed": false
+      }
+    ]
+  }
+}

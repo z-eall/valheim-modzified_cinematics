@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <!-- Copy this file to environment.props and set paths for your machine. environment.props is gitignored. -->
+    <ValheimGamePath></ValheimGamePath>
+    <BepInExPath>$(ValheimGamePath)\BepInEx</BepInExPath>
+    <CorlibPath>$(ValheimGamePath)\valheim_Data\Managed</CorlibPath>
+    <PublicizedAssembliesPath>$(ValheimGamePath)\valheim_Data\Managed\publicized_assemblies</PublicizedAssembliesPath>
+    <CopyOutputDLLPath>$(MSBuildThisFileDirectory)..\plugins</CopyOutputDLLPath>
+  </PropertyGroup>
+</Project>
