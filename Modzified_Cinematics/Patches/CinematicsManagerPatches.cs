@@ -136,23 +136,6 @@ internal static class CinematicsManagerPatches
       __result = false;
       return false;
     }
-    else if (Settings.SkipCustom)
-    {
-      if (CatalogInject.IsInjected(video.m_name))
-      {
-        ModzifiedCinematicsPlugin.LogAt(
-          LogLevel.Debug,
-          $"Skip custom: injected '{video.m_name}' not played.");
-        __result = false;
-        return false;
-      }
-
-      ModzifiedCinematicsPlugin.LogAt(
-        LogLevel.Debug,
-        $"Skip custom: using vanilla SoftRef for '{video.m_name}'.");
-      return true;
-    }
-
     if (!CinematicsStore.TryPickReplaceClip(video.m_name, out string abs, out CinematicsStore.PickFail fail))
     {
       if (fail == CinematicsStore.PickFail.Missing)
@@ -246,11 +229,6 @@ internal static class CinematicsManagerPatches
   private static void WarmPrepareIfReplace(string cinematicName)
   {
     if (CinematicsManager.s_instance == null || CinematicsManager.m_playing)
-    {
-      return;
-    }
-
-    if (Settings.SkipCustom)
     {
       return;
     }

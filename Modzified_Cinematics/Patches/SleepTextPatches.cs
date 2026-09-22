@@ -90,11 +90,6 @@ internal static class SleepTextPatches
 
   private static bool ShouldHoldSleepUi()
   {
-    if (Settings.SkipCustom)
-    {
-      return false;
-    }
-
     if (CinematicsManager.IsStartedPlaying() || CinematicsManager.IsPlaying())
     {
       return true;
@@ -105,11 +100,6 @@ internal static class SleepTextPatches
 
   private static bool SoftRefDreamReplacePending()
   {
-    if (Settings.SkipCustom)
-    {
-      return false;
-    }
-
     string name = CinematicsManager.m_dreamCinematic;
     if (string.IsNullOrEmpty(name))
     {

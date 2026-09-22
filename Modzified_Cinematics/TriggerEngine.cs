@@ -10,10 +10,29 @@ namespace Modzified_Cinematics;
 /// </summary>
 internal static class TriggerEngine
 {
-  private const string OnceKeyPrefix = "mc_once_";
+  private const string OnceKeyPrefix = "mc_onetime_";
+  private const string PendingKeyPrefix = "mc_pending_";
+
+  /// <summary>
+  /// Absorbs a near-duplicate re-fire of the same rule within this window, regardless of that rule's
+  /// own cooldown/oneTime — e.g. a single EWP <c>say</c> line triggers both vanilla's speech-bubble RPC
+  /// and its chat-log RPC, so a <c>type: say</c> entry calls any RPC it targets twice in the same frame.
+  /// Confirmed 2026-09-22 against a real playtest log + EWP's HandleRPC.cs (Say and ChatMessage both
+  /// route to the same handler). Any external caller could double-fire the same way — this is a floor,
+  /// not a substitute for a rule's own `cooldown:`.
+  /// </summary>
+  private const float MinReplayGapSeconds = 0.5f;
 
   private static readonly Dictionary<string, float> CooldownUntil =
     new(StringComparer.Ordinal);
+
+  private static readonly Dictionary<string, float> LastPlayedAt =
+    new(StringComparer.Ordinal);
+
+  /// <summary>In-memory mirror of this profile's pending (combat-postponed) rule names — lazily loaded from <see cref="Player.GetUniqueKeys"/>.</summary>
+  private static readonly List<string> _pendingRuleNames = new();
+
+  private static bool _pendingLoaded;
 
   private static int _suppressVanillaDream;
 
@@ -103,11 +122,6 @@ internal static class TriggerEngine
 
   internal static bool ShouldReplaceVanillaDream(Character character)
   {
-    if (Settings.SkipCustom)
-    {
-      return false;
-    }
-
     if (character == null || string.IsNullOrEmpty(character.m_dreamCinematic))
     {
       return false;
@@ -365,11 +379,6 @@ internal static class TriggerEngine
   /// <summary>True if SoftRef intro row has a custom <c>type:</c> (replaces that SoftRef's vanilla when).</summary>
   internal static bool IntroRowReplacesVanillaWhen()
   {
-    if (Settings.SkipCustom)
-    {
-      return false;
-    }
-
     if (!CinematicsStore.TryGetRule(VanillaCatalog.IntroName, out CinematicsStore.CompiledRule rule))
     {
       return false;
@@ -654,23 +663,75 @@ internal static class TriggerEngine
     return string.Equals(actual!.Trim(), filter.Trim(), StringComparison.OrdinalIgnoreCase);
   }
 
+  /// <summary>Entry point for <c>RPC_PlayModzifiedCinematics</c> — see Patches/RpcPatches.cs.</summary>
+  internal static void OnClientRpc(string ruleName)
+  {
+    if (string.IsNullOrWhiteSpace(ruleName))
+    {
+      ModzifiedCinematicsPlugin.LogAt(LogLevel.Warning, "Cinematics RPC: empty rule name — ignored.");
+      return;
+    }
+
+    string trimmed = ruleName.Trim();
+    if (!CinematicsStore.TryGetRule(trimmed, out CinematicsStore.CompiledRule rule) || !rule.Enabled)
+    {
+      ModzifiedCinematicsPlugin.LogAt(
+        LogLevel.Warning,
+        $"Cinematics RPC: no enabled rule named '{trimmed}' — ignored.");
+      return;
+    }
+
+    if (!TryGetParsed(rule, out TriggerTypeParse.Parsed parsed) || parsed.Kind != TriggerTypeParse.Kind.ClientRpc)
+    {
+      ModzifiedCinematicsPlugin.LogAt(
+        LogLevel.Warning,
+        $"Cinematics RPC: '{trimmed}' is not type: clientRpc — ignored.");
+      return;
+    }
+
+    Fire(rule, parsed);
+  }
+
   private static void Fire(
     CinematicsStore.CompiledRule rule,
     TriggerTypeParse.Parsed parsed,
     bool forceNow = false)
   {
-    if (Settings.SkipCustom)
-    {
-      ModzifiedCinematicsPlugin.LogAt(
-        LogLevel.Debug,
-        $"Cinematics trigger: skip custom — '{rule.Name}' not fired.");
-      return;
-    }
-
     if (!PassFrequency(rule, parsed))
     {
       return;
     }
+
+    // Combat protection: every kind except dream: true (already vanilla-gated safe via the bed check).
+    bool blockedByCombat = !forceNow && !rule.Dream &&
+                           Player.m_localPlayer != null && Player.m_localPlayer.IsSensed();
+
+    if (blockedByCombat)
+    {
+      EnqueuePending(rule.Name);
+      return;
+    }
+
+    // Debounce floor: absorbs a near-duplicate re-fire of the same rule (e.g. a caller's own quirk
+    // invoking the same RPC twice for one action) even when the rule has no cooldown of its own.
+    if (LastPlayedAt.TryGetValue(rule.Name, out float lastPlayed) &&
+        Time.time - lastPlayed < MinReplayGapSeconds)
+    {
+      ModzifiedCinematicsPlugin.LogAt(
+        LogLevel.Debug,
+        $"Cinematics trigger: '{rule.Name}' duplicate call within {MinReplayGapSeconds}s — ignored.");
+      return;
+    }
+
+    // Safe to resolve now — covers a fresh trigger and, when this rule was already queued,
+    // opportunistic early resolution (removing from a queue it was never in is a harmless no-op).
+    DequeuePending(rule.Name);
+    PlayNow(rule, parsed, forceNow);
+  }
+
+  private static void PlayNow(CinematicsStore.CompiledRule rule, TriggerTypeParse.Parsed parsed, bool forceNow)
+  {
+    LastPlayedAt[rule.Name] = Time.time;
 
     bool dream = !forceNow && rule.Dream;
     ModzifiedCinematicsPlugin.LogAt(
@@ -681,10 +742,33 @@ internal static class TriggerEngine
 
     if (dream)
     {
+      // Queued for next sleep, not playing now — no UI to release yet.
       CinematicsManager.SetDreamCinematic(rule.Name);
     }
     else
     {
+      // Release any open container/inventory UI first — CinematicsManager.Play() only hides panels by
+      // switching their GameObject off directly, never through their own Close(), so a container's
+      // "in use" flag is never cleared and gets stuck forever otherwise. Confirmed against
+      // CinematicsManager.cs's m_hiders handling and Container.cs's SetInUse/RPC_RequestOpen.
+      //
+      // Tried and reverted 2026-09-22: registering InventoryGui's GameObject into CinematicsManager's
+      // own m_hiders list instead of calling Hide() (to make the container look like it stayed open).
+      // That only toggles the panel's GameObject active/inactive — it never calls Container.SetInUse(),
+      // since Container is a separate script on the physical chest, not a child of InventoryGui. The
+      // "in use" ZDO flag was never released, reproducing this exact stuck-forever bug in the field.
+      // Confirmed via a real playtest (chest stuck again with 0 code path calling SetInUse(false)).
+      //
+      // Deliberately NOT reopened after the video ends: Container.SetInUse() writes straight into the
+      // ZDO (ZDOVars.s_inUse, Container.cs's UpdateUseVisual), the same field an EWP `type: change,
+      // InUse 1` entry watches — reopening would flip it 0->1 again and could refire that same entry,
+      // looping forever with no way to break out. Confirmed 2026-09-22 against a real EWP test script
+      // wired exactly that way. Closing (and staying closed) is the only safe option found so far.
+      if (InventoryGui.instance != null)
+      {
+        InventoryGui.instance.Hide();
+      }
+
       if (parsed.Kind == TriggerTypeParse.Kind.FirstSpawn)
       {
         _firstSpawnFilmTookOver = true;
@@ -693,7 +777,160 @@ internal static class TriggerEngine
       CinematicsManager.Play(rule.Name);
     }
 
+    // Moved here from Fire()-time: a postponed trigger must not be marked "used" before it plays.
     MarkFired(rule, parsed);
+  }
+
+  /// <summary>Rule names currently postponed by combat protection, waiting for a safe-and-home resume.</summary>
+  internal static IReadOnlyList<string> PendingRuleNames
+  {
+    get
+    {
+      EnsurePendingLoaded();
+      return _pendingRuleNames;
+    }
+  }
+
+  private static void EnsurePendingLoaded()
+  {
+    if (_pendingLoaded || Player.m_localPlayer == null)
+    {
+      return;
+    }
+
+    _pendingLoaded = true;
+    foreach (string key in Player.m_localPlayer.GetUniqueKeys())
+    {
+      if (!key.StartsWith(PendingKeyPrefix, StringComparison.Ordinal))
+      {
+        continue;
+      }
+
+      string name = key.Substring(PendingKeyPrefix.Length);
+      if (!_pendingRuleNames.Contains(name))
+      {
+        _pendingRuleNames.Add(name);
+      }
+    }
+  }
+
+  /// <summary>Reset the in-memory mirror on a fresh login — reloaded lazily from that profile's own keys.</summary>
+  internal static void ResetPendingSession()
+  {
+    _pendingLoaded = false;
+    _pendingRuleNames.Clear();
+  }
+
+  private static void EnqueuePending(string ruleName)
+  {
+    EnsurePendingLoaded();
+    if (Player.m_localPlayer == null)
+    {
+      // No profile to persist against — nothing safe to do but drop it.
+      return;
+    }
+
+    string key = PendingKeyPrefix + ruleName;
+    if (!Player.m_localPlayer.HaveUniqueKey(key))
+    {
+      Player.m_localPlayer.AddUniqueKey(key);
+    }
+
+    if (!_pendingRuleNames.Contains(ruleName))
+    {
+      _pendingRuleNames.Add(ruleName);
+    }
+
+    ModzifiedCinematicsPlugin.LogAt(
+      LogLevel.Info,
+      $"Cinematics trigger: '{ruleName}' postponed — combat detected, queued for later.");
+  }
+
+  private static void DequeuePending(string ruleName)
+  {
+    if (Player.m_localPlayer != null)
+    {
+      string key = PendingKeyPrefix + ruleName;
+      if (Player.m_localPlayer.HaveUniqueKey(key))
+      {
+        Player.m_localPlayer.RemoveUniqueKey(key);
+      }
+    }
+
+    _pendingRuleNames.Remove(ruleName);
+  }
+
+  private static bool _resumePromptActive;
+
+  /// <summary>
+  /// Resume/reactivation check — call from the mod's existing ~1 Hz poll (TriggerPatches.UpdateBiomePatch).
+  /// One prompt at a time, oldest queued rule first; the next one only shows once this one is answered
+  /// (Yes or No) — never while a video is actually playing.
+  /// </summary>
+  internal static void OnResumeCheckTick()
+  {
+    EnsurePendingLoaded();
+    if (_pendingRuleNames.Count == 0 || _resumePromptActive)
+    {
+      return;
+    }
+
+    if (Player.m_localPlayer == null ||
+        CinematicsManager.IsPlaying() ||
+        CinematicsManager.IsStartedPlaying())
+    {
+      return;
+    }
+
+    if (Player.m_localPlayer.IsSensed())
+    {
+      return;
+    }
+
+    if (EffectArea.IsPointInsideArea(Player.m_localPlayer.transform.position, EffectArea.Type.PlayerBase) == null)
+    {
+      return;
+    }
+
+    ShowResumePrompt(_pendingRuleNames[0]);
+  }
+
+  private static void ShowResumePrompt(string ruleName)
+  {
+    _resumePromptActive = true;
+    int count = _pendingRuleNames.Count;
+    string plural = count == 1 ? "" : "s";
+    string text = $"You have {count} pending video{plural}, watch '{ruleName}' now?";
+
+    UnifiedPopup.Push(new YesNoPopup(
+      "Cinematics",
+      text,
+      delegate
+      {
+        _resumePromptActive = false;
+        UnifiedPopup.Pop();
+        ResolvePendingPlay(ruleName);
+      },
+      delegate
+      {
+        _resumePromptActive = false;
+        UnifiedPopup.Pop();
+        DequeuePending(ruleName);
+        ModzifiedCinematicsPlugin.LogAt(
+          LogLevel.Info,
+          $"Cinematics trigger: '{ruleName}' dismissed from queue (No).");
+      },
+      localizeText: false));
+  }
+
+  private static void ResolvePendingPlay(string ruleName)
+  {
+    DequeuePending(ruleName);
+    if (CinematicsStore.TryGetRule(ruleName, out CinematicsStore.CompiledRule rule) &&
+        TryGetParsed(rule, out TriggerTypeParse.Parsed parsed))
+    {
+      PlayNow(rule, parsed, forceNow: false);
+    }
   }
 
   private static bool PassFrequency(CinematicsStore.CompiledRule rule, TriggerTypeParse.Parsed parsed)
@@ -714,18 +951,15 @@ internal static class TriggerEngine
       return false;
     }
 
-    bool oneTime = rule.OneTime ?? parsed.DefaultOneTime;
-    if (!oneTime)
+    TriggerTypeParse.OneTimeScope? scope = rule.OneTime ?? parsed.DefaultOneTimeScope;
+    if (scope == null)
     {
       return true;
     }
 
     string key = OnceKeyPrefix + Sanitize(rule.Name);
-    bool preferPlayer = parsed.Kind == TriggerTypeParse.Kind.FirstSpawn ||
-                        (parsed.Kind == TriggerTypeParse.Kind.Discover &&
-                         parsed.Discover == TriggerTypeParse.DiscoverMode.BiomeFirst);
 
-    if (preferPlayer)
+    if (scope == TriggerTypeParse.OneTimeScope.Player)
     {
       if (Player.m_localPlayer != null && Player.m_localPlayer.HaveUniqueKey(key))
       {
@@ -738,6 +972,7 @@ internal static class TriggerEngine
       return true;
     }
 
+    // World scope, falling back to the player store when there's no ZoneSystem (e.g. main menu preview).
     if (ZoneSystem.instance != null && ZoneSystem.instance.GetGlobalKey(key))
     {
       ModzifiedCinematicsPlugin.LogAt(
@@ -772,18 +1007,15 @@ internal static class TriggerEngine
       CooldownUntil[rule.Name] = Time.time + cooldown.Value;
     }
 
-    bool oneTime = rule.OneTime ?? parsed.DefaultOneTime;
-    if (!oneTime)
+    TriggerTypeParse.OneTimeScope? scope = rule.OneTime ?? parsed.DefaultOneTimeScope;
+    if (scope == null)
     {
       return;
     }
 
     string key = OnceKeyPrefix + Sanitize(rule.Name);
-    bool preferPlayer = parsed.Kind == TriggerTypeParse.Kind.FirstSpawn ||
-                        (parsed.Kind == TriggerTypeParse.Kind.Discover &&
-                         parsed.Discover == TriggerTypeParse.DiscoverMode.BiomeFirst);
 
-    if (preferPlayer)
+    if (scope == TriggerTypeParse.OneTimeScope.Player)
     {
       if (Player.m_localPlayer != null && !Player.m_localPlayer.HaveUniqueKey(key))
       {

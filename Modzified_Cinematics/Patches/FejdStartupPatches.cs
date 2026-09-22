@@ -108,12 +108,6 @@ internal static class FejdStartupPatches
       return false;
     }
 
-    // Local skip: keep vanilla Fejd intro (no SoftRef clip replace / black-under-logo).
-    if (Settings.SkipCustom)
-    {
-      return true;
-    }
-
     if (CinematicsStore.TryPickReplaceClip(VanillaCatalog.IntroName, out _, out _))
     {
       __result = PlayIntroWithBlackUnderLogo(__instance);

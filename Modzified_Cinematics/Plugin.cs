@@ -10,7 +10,7 @@ namespace Modzified_Cinematics;
 public class ModzifiedCinematicsPlugin : BaseUnityPlugin
 {
   internal const string ModName = "Modzified_Cinematics";
-  internal const string ModVersion = "0.3.13";
+  internal const string ModVersion = "0.4.0";
   /// <summary>Jere-style snake_case GUID. Thunderstore author when published: Zeall.</summary>
   internal const string ModGUID = "modzified_cinematics";
 

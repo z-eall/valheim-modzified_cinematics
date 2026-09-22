@@ -9,7 +9,7 @@ Full syntax reference for `modzified_cinematics*.yaml` and `modzified_loading_sc
 - `type` — which moment triggers it (table below). Omit entirely to keep the vanilla moment — only valid on a vanilla `name`.
 - `dream` — `true` queues it for the next time you sleep; omit or `false` plays it immediately.
 - `clips` — one or more video file names from `clips/`. Multiple files = one picked at random.
-- `oneTime` — fires once, then never again.
+- `oneTime` — `player` fires once per player, then never again for them; `world` fires once for the whole server. Omit to allow repeats.
 - `cooldown` — seconds before it can fire again; overrides that type's own default (see table).
 
 ## Trigger types
@@ -27,12 +27,17 @@ Full syntax reference for `modzified_cinematics*.yaml` and `modzified_loading_sc
 | `discover, biomeEnter <biome>` | Enter that biome (default 10 min cooldown) |
 | `discover, location <match>` | Enter a matching location volume (default 10 min cooldown) |
 | `interact, runestone <match>` | Read a matching runestone (default 10 min cooldown) |
-| `interact, bossstone <match>` | Trophy hang; you or anyone within 20 m (oneTime on by default) |
+| `interact, bossstone <match>` | Trophy hang; you or anyone within 20 m (`oneTime: world` by default) |
 | `event, start <name>` | Random event begins |
 | `event, end <name>` | Random event ends |
 | `teleport, inPortal <tag>` | Walk into a portal with that tag (default 10 min cooldown) |
 | `teleport, outPortal <tag>` | Exit to a portal with that tag (default 10 min cooldown) |
 | `teleport, pos <x,z,y>` | Teleport destination within 3 m (default 10 min cooldown) |
+| `clientRpc` | Only when this entry is called from the custom RPC — see [custom-rpc.md](custom-rpc.md) |
+
+## Safety and queueing
+
+If a cinematic would trigger while you're in danger, it waits instead of playing over a fight. Once you're safe and back at your own base, you're asked if you want to watch it now. If more than one is waiting, you're asked about them one at a time, oldest first — the prompt names which one and how many are left. `dream: true` cinematics always wait for your next sleep anyway, so this doesn't apply to them.
 
 ## Examples
 
@@ -53,7 +58,7 @@ Full syntax reference for `modzified_cinematics*.yaml` and `modzified_loading_sc
   type: globalKey, defeated_gdking
   clips:
   - elder_fanfare.mp4
-  oneTime: true
+  oneTime: world
 ```
 
 **New cinematic, queued for your next sleep** — fires the next time you sleep instead of right away.

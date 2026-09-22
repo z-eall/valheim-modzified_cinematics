@@ -25,7 +25,15 @@ internal static class TriggerTypeParse
     Discover,
     Interact,
     Event,
-    Teleport
+    Teleport,
+    ClientRpc
+  }
+
+  /// <summary><c>oneTime: player</c> tracks per-player (<see cref="Player.AddUniqueKey"/>); <c>oneTime: world</c> tracks server-wide (<see cref="ZoneSystem.SetGlobalKey"/>).</summary>
+  internal enum OneTimeScope
+  {
+    Player,
+    World
   }
 
   internal enum KillMode
@@ -103,8 +111,9 @@ internal static class TriggerTypeParse
     internal TeleportMode? Teleport { get; }
     internal UnityEngine.Vector3? Pos { get; }
 
-    internal bool DefaultOneTime =>
-      Kind == Kind.Interact && Interact == InteractMode.Bossstone;
+    /// <summary>Null = no default scope (not one-time unless the rule says so). bossstone carries over its real shipped default: world.</summary>
+    internal OneTimeScope? DefaultOneTimeScope =>
+      Kind == Kind.Interact && Interact == InteractMode.Bossstone ? OneTimeScope.World : (OneTimeScope?)null;
 
     internal bool HasDefaultCooldown =>
       (Kind == Kind.Discover && Discover is DiscoverMode.BiomeEnter or DiscoverMode.Location) ||
@@ -143,6 +152,18 @@ internal static class TriggerTypeParse
     string[] parts = string.IsNullOrEmpty(paramRaw)
       ? Array.Empty<string>()
       : paramRaw.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+    if (Eq(kindRaw, "clientRpc"))
+    {
+      if (parts.Length != 0)
+      {
+        error = "clientRpc takes no parameters — the RPC names this rule by its own name field";
+        return false;
+      }
+
+      parsed = new Parsed(Kind.ClientRpc, "clientRpc", "");
+      return true;
+    }
 
     if (Eq(kindRaw, "firstSpawn"))
     {
@@ -383,6 +404,33 @@ internal static class TriggerTypeParse
     }
 
     error = "unknown type kind '" + kindRaw + "'";
+    return false;
+  }
+
+  /// <summary>Unrecognized token: warn, treat as omitted (matches how an invalid <c>type:</c> token is handled).</summary>
+  internal static bool TryParseOneTimeScope(string? raw, out OneTimeScope? scope, out string error)
+  {
+    scope = null;
+    error = "";
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+      return true;
+    }
+
+    string trimmed = raw!.Trim();
+    if (Eq(trimmed, "player"))
+    {
+      scope = OneTimeScope.Player;
+      return true;
+    }
+
+    if (Eq(trimmed, "world"))
+    {
+      scope = OneTimeScope.World;
+      return true;
+    }
+
+    error = "oneTime must be player or world (got '" + trimmed + "')";
     return false;
   }
 

@@ -17,6 +17,7 @@ internal sealed class CinematicRuleData
   /// <summary>True = queue for next sleep; omit/false = play now.</summary>
   public bool? dream;
   public List<string>? clips;
-  public bool? oneTime;
+  /// <summary><c>player</c> or <c>world</c>; omitted = not one-time.</summary>
+  public string? oneTime;
   public float? cooldown;
 }

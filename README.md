@@ -11,7 +11,9 @@ Install on all clients and the server. Dependency required: **YamlDotNet**.
 
 - Turn each cinematic on or off, or swap in your own clip.
 - Add brand new cinematics that play on kills, sleep, discoveries, portals, and more.
+- Custom cinematics wait for a safe moment before playing — no mid-fight video watching.
 - Loading, portal, door and logout screens show tips and a background picture — pick your own or keep vanilla.
+- A custom-made RPC that you can call to play custom cinematics outside this mod.
 
 ## How to use
 
@@ -24,11 +26,12 @@ Install on all clients and the server. Dependency required: **YamlDotNet**.
 
 Full list of moments a cinematic can play on, YAML syntax, and video export help: **[docs/triggers.md](docs/triggers.md)**.
 
+Calling a cinematic from RPC: **[docs/custom-rpc.md](docs/custom-rpc.md)**.
+
 ## Configuration
 
 File: `BepInEx/config/modzified_cinematics.cfg`.
 
-- **Skip custom cinematics** — fall back to fully vanilla on this client only. Default off.
 - **Art dim** — how dark the loading picture gets. Default `0.4`.
 - **Art zoom max** / **Art zoom seconds** — how much and how fast the loading picture drifts.
 - **Include vanilla tips** — mix your tips with vanilla's, or show only yours. Default on.

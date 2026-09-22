@@ -54,7 +54,7 @@ internal static class CinematicsStore
       TriggerTypeParse.Parsed? parsed,
       bool dream,
       IReadOnlyList<string> clips,
-      bool? oneTime,
+      TriggerTypeParse.OneTimeScope? oneTime,
       float? cooldown)
     {
       Name = name;
@@ -75,8 +75,8 @@ internal static class CinematicsStore
     internal TriggerTypeParse.Parsed? Parsed { get; }
     internal bool Dream { get; }
     internal IReadOnlyList<string> Clips { get; }
-    /// <summary>Null = use type default (e.g. bossstone oneTime on).</summary>
-    internal bool? OneTime { get; }
+    /// <summary>Null = use type default (e.g. bossstone oneTime on, world-scoped).</summary>
+    internal TriggerTypeParse.OneTimeScope? OneTime { get; }
     internal float? Cooldown { get; }
   }
 
@@ -670,7 +670,16 @@ internal static class CinematicsStore
       }
 
       bool dream = data.dream == true;
-      bool? oneTime = data.oneTime;
+      TriggerTypeParse.OneTimeScope? oneTime = null;
+      if (!string.IsNullOrWhiteSpace(data.oneTime))
+      {
+        if (!TriggerTypeParse.TryParseOneTimeScope(data.oneTime, out oneTime, out string oneTimeError))
+        {
+          ModzifiedCinematicsPlugin.LogWarnOnce(
+            $"Cinematics YAML: '{name}' oneTime '{data.oneTime}' invalid — {oneTimeError} (treated as omitted).");
+        }
+      }
+
       float? cooldown = data.cooldown is > 0f ? data.cooldown : null;
       List<string> clips = new();
       if (data.clips != null)
@@ -711,7 +720,7 @@ internal static class CinematicsStore
     sb.AppendLine("# Main menu → Cinematics can still replay a slot that is disabled.");
     sb.AppendLine("# Media: .mp4 + H.264 video + AAC audio (AV1 and odd codecs often fail or play silent).");
     sb.AppendLine("# Clip paths are written double-quoted so spaces stay obvious on rewrite.");
-    sb.AppendLine("# Optional: type / dream (when to play), oneTime / cooldown. Dump order: name → enabled → type/dream → clips/oneTime/cooldown.");
+    sb.AppendLine("# Optional: type / dream (when to play), oneTime: player/world / cooldown. Dump order: name → enabled → type/dream → clips/oneTime/cooldown.");
     sb.AppendLine("# type grammar (EWP): kind, param1 param2 — one comma after kind; params space-separated.");
     sb.AppendLine("# Loading tips/art live in modzified_loading_screens.yaml (separate file kind).");
     sb.AppendLine();
@@ -759,9 +768,9 @@ internal static class CinematicsStore
         }
       }
 
-      if (row.oneTime == true)
+      if (!string.IsNullOrWhiteSpace(row.oneTime))
       {
-        sb.AppendLine("  oneTime: true");
+        sb.Append("  oneTime: ").AppendLine(row.oneTime!.Trim());
       }
 
       if (row.cooldown is > 0f)

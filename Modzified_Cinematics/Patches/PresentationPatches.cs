@@ -26,7 +26,7 @@ internal static class PresentationPatches
 
       WriteTipRef(_vanillaLoadingTips);
 
-      if (Settings.SkipCustom || LoadingScreensStore.LoadingTips.Count == 0)
+      if (LoadingScreensStore.LoadingTips.Count == 0)
       {
         if (_vanillaLoadingTips.Count > 0 &&
             !SameTipList(__instance.m_loadingTips, _vanillaLoadingTips))

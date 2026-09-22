@@ -11,6 +11,7 @@ internal static class TriggerPatches
   private static Location? _lastLocation;
   private static bool _biomeEnterPrimed;
   private static Heightmap.Biome _lastBiome = Heightmap.Biome.None;
+  private static float _resumeCheckTimer;
 
   [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
   private static class CharacterOnDeathPatch
@@ -144,12 +145,6 @@ internal static class TriggerPatches
   [HarmonyPatch(typeof(Game), "Start")]
   private static class GameStartPatch
   {
-    [HarmonyPrefix]
-    private static void Prefix(Game __instance)
-    {
-      TryDevResetFirstSpawn(__instance);
-    }
-
     [HarmonyPostfix]
     private static void Postfix()
     {
@@ -157,7 +152,9 @@ internal static class TriggerPatches
       _lastLocation = null;
       _biomeEnterPrimed = false;
       _lastBiome = Heightmap.Biome.None;
+      _resumeCheckTimer = 0f;
       TriggerEngine.ResetFirstSpawnSession();
+      TriggerEngine.ResetPendingSession();
     }
   }
 
@@ -189,6 +186,14 @@ internal static class TriggerPatches
       if (__instance != Player.m_localPlayer)
       {
         return;
+      }
+
+      // Same ~1 Hz cadence as vanilla's own m_biomeTimer — piggyback rather than run a second poll loop.
+      _resumeCheckTimer += Time.deltaTime;
+      if (_resumeCheckTimer > 1f)
+      {
+        _resumeCheckTimer = 0f;
+        TriggerEngine.OnResumeCheckTick();
       }
 
       BiomeSector? sector = __instance.GetCurrentBiomeData();
@@ -352,34 +357,6 @@ internal static class TriggerPatches
 
       TriggerEngine.OnTeleportTo(pos);
     }
-  }
-
-  private static void TryDevResetFirstSpawn(Game game)
-  {
-    string want = Settings.DevResetFirstSpawnName?.Value?.Trim() ?? "";
-    if (want.Length == 0 || game?.m_playerProfile == null)
-    {
-      return;
-    }
-
-    PlayerProfile profile = game.m_playerProfile;
-    if (!string.Equals(profile.GetName(), want, StringComparison.OrdinalIgnoreCase))
-    {
-      return;
-    }
-
-    if (profile.m_firstSpawn)
-    {
-      ModzifiedCinematicsPlugin.LogAt(
-        BepInEx.Logging.LogLevel.Debug,
-        $"Dev reset firstSpawn: '{want}' already firstSpawn.");
-      return;
-    }
-
-    profile.m_firstSpawn = true;
-    ModzifiedCinematicsPlugin.LogAt(
-      BepInEx.Logging.LogLevel.Warning,
-      $"Dev reset firstSpawn: forced true for '{want}' (temporary playtest).");
   }
 
   private static bool IsWorldFirstSpawnIntro()

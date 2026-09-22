@@ -99,7 +99,7 @@ internal static class LoadingArt
     string kind = ClassifyHud(hud, player);
     if (!s.Active)
     {
-      if (kind.Length == 0 || hud.m_loadingScreen.alpha <= 0.001f || s.Failed || Settings.SkipCustom || LoadingScreensStore.LoadingArts.Count == 0)
+      if (kind.Length == 0 || hud.m_loadingScreen.alpha <= 0.001f || s.Failed || LoadingScreensStore.LoadingArts.Count == 0)
       {
         return;
       }
@@ -165,7 +165,7 @@ internal static class LoadingArt
   /// <summary><c>FejdStartup.LoadMainScene</c> just switched <c>m_loading</c> on.</summary>
   internal static void BeginMenu(GameObject? loading)
   {
-    if (loading == null || Settings.SkipCustom || LoadingScreensStore.LoadingArts.Count == 0)
+    if (loading == null || LoadingScreensStore.LoadingArts.Count == 0)
     {
       return;
     }

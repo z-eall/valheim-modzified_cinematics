@@ -15,11 +15,6 @@ internal static class Settings
 
   internal static ConfigSync Sync { get; private set; } = null!;
 
-  internal static ConfigEntry<bool>? SkipCustomCinematics { get; private set; }
-
-  /// <summary>Temporary playtest: reset profile firstSpawn when this character name joins a world. Empty = off.</summary>
-  internal static ConfigEntry<string>? DevResetFirstSpawnName { get; private set; }
-
   internal static ConfigEntry<float>? ArtDim { get; private set; }
 
   internal static ConfigEntry<bool>? IncludeVanillaTips { get; private set; }
@@ -40,12 +35,6 @@ internal static class Settings
   /// <summary>On (default) = your tips mix with vanilla tips; off = only your tips (empty list = vanilla).</summary>
   internal static bool VanillaTipsOn => IncludeVanillaTips?.Value != false;
 
-  /// <summary>
-  /// Local opt-out: skip pack/custom immersion (triggers, SoftRef clip replace, injected films).
-  /// Gallery deliberate play still works via <see cref="CinematicsStore.AllowReplayOnce"/>.
-  /// </summary>
-  internal static bool SkipCustom => SkipCustomCinematics?.Value == true;
-
   internal static void Init(ConfigFile config)
   {
     Sync = new ConfigSync(ModzifiedCinematicsPlugin.ModGUID)
@@ -55,25 +44,6 @@ internal static class Settings
       ModRequired = false,
       IsLocked = true
     };
-
-    SkipCustomCinematics = BindLocal(
-      config,
-      SectionGeneral,
-      "Skip custom cinematics",
-      false,
-      new ConfigDescription(
-        "On = fully vanilla: no custom triggers, clips, cinematics, or loading art. Vanilla cinematics and tips still play; Main menu → Cinematics still works. Not Server-synced.",
-        tags: new object[] { new ConfigurationManagerAttributes { Order = 1 } }));
-
-    DevResetFirstSpawnName = BindLocal(
-      config,
-      SectionGeneral,
-      "Dev reset firstSpawn name",
-      "Testspawn",
-      new ConfigDescription(
-        "TEMPORARY playtest only. When this exact character name joins a world, force firstSpawn true so intro / type: firstSpawn can retest.\n" +
-        "Leave empty to disable. Clear before publish. Not Server-synced.",
-        tags: new object[] { new ConfigurationManagerAttributes { Order = 0, IsAdvanced = true } }));
 
     ArtDim = BindLocal(
       config,
@@ -124,15 +94,6 @@ internal static class Settings
         tags: new object[] { new ConfigurationManagerAttributes { Order = 1, IsAdvanced = true } }));
 
     CinematicsStore.Init(Sync);
-    ModzifiedCinematicsPlugin.LogAt(LogLevel.Info, $"Skip custom cinematics: {SkipCustom}.");
-    string devName = DevResetFirstSpawnName.Value?.Trim() ?? "";
-    if (devName.Length > 0)
-    {
-      ModzifiedCinematicsPlugin.LogAt(
-        LogLevel.Warning,
-        $"Dev reset firstSpawn name: '{devName}' (temporary playtest — clear before publish).");
-    }
-
     ModzifiedCinematicsPlugin.LogAt(LogLevel.Info, $"Log levels: {LogLevels.Value}.");
   }
 
