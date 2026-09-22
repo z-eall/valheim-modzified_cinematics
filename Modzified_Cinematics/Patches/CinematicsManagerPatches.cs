@@ -82,6 +82,7 @@ internal static class CinematicsManagerPatches
   private static void AwakePostfix()
   {
     CinematicsStore.OnCatalogReady();
+    CatalogInject.SyncFromStore();
     // Earliest Prepare during logo / startup scene (aligned ticket 19). Fejd holds logo until ready.
     if (!Game.m_hasStartedOnce)
     {
@@ -124,17 +125,50 @@ internal static class CinematicsManagerPatches
       ModzifiedCinematicsPlugin.LogAt(
         LogLevel.Debug,
         $"Skip auto-play (enabled: false): {video.m_name}");
+      // MUST report false (honest failure), not true: vanilla callers rely on a false return to run
+      // their own cleanup — FejdStartup's intro coroutine re-enables m_mainMenu only in its "Play
+      // failed" branch. Tried reporting true (2026-09-22, 0.3.11): vanilla then assumed a real video
+      // was playing and would re-enable the menu itself when it finished — since nothing was really
+      // playing, that never happened, and the game got stuck on the campfire background with no menu
+      // at all. The vanilla [Error] log this path produces is cosmetically misleading but harmless;
+      // a stuck main menu is not. See ticket 28 (fog: FejdStartup's own prefix mysteriously never
+      // fires, which is the real place this should be silenced without side effects).
       __result = false;
       return false;
+    }
+    else if (Settings.SkipCustom)
+    {
+      if (CatalogInject.IsInjected(video.m_name))
+      {
+        ModzifiedCinematicsPlugin.LogAt(
+          LogLevel.Debug,
+          $"Skip custom: injected '{video.m_name}' not played.");
+        __result = false;
+        return false;
+      }
+
+      ModzifiedCinematicsPlugin.LogAt(
+        LogLevel.Debug,
+        $"Skip custom: using vanilla SoftRef for '{video.m_name}'.");
+      return true;
     }
 
     if (!CinematicsStore.TryPickReplaceClip(video.m_name, out string abs, out CinematicsStore.PickFail fail))
     {
       if (fail == CinematicsStore.PickFail.Missing)
       {
+        ModzifiedCinematicsPlugin.LogWarnOnce(
+          $"Cinematics replace: no clip files found for {video.m_name} — vanilla plays. Check the clip names in modzified_cinematics.yaml.");
+      }
+
+      if (CatalogInject.IsInjected(video.m_name))
+      {
+        // No vanilla clip to fall back to.
         ModzifiedCinematicsPlugin.LogAt(
           LogLevel.Warning,
-          $"Cinematics replace: no existing files for {video.m_name} — using vanilla.");
+          $"Cinematics catalog: injected '{video.m_name}' has no playable clips on this client.");
+        __result = false;
+        return false;
       }
 
       return true;
@@ -216,6 +250,11 @@ internal static class CinematicsManagerPatches
       return;
     }
 
+    if (Settings.SkipCustom)
+    {
+      return;
+    }
+
     if (!CinematicsStore.IsAutoPlayEnabled(cinematicName))
     {
       return;
@@ -274,7 +313,16 @@ internal static class CinematicsManagerPatches
     CinematicsManager.VideoCompleteAction onStop,
     string absolutePath)
   {
-    if (video == null || (video.m_videoClip == null && video.m_videoClipLow == null))
+    // SoftRefs keep VideoClips for vanilla fallback. Injected names are file-backed only
+    // (CatalogInject leaves clips null) — URL replace is the media.
+    if (video == null || string.IsNullOrEmpty(absolutePath))
+    {
+      return false;
+    }
+
+    if (video.m_videoClip == null &&
+        video.m_videoClipLow == null &&
+        !CatalogInject.IsInjected(video.m_name))
     {
       return false;
     }

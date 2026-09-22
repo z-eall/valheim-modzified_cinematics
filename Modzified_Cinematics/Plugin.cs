@@ -10,7 +10,7 @@ namespace Modzified_Cinematics;
 public class ModzifiedCinematicsPlugin : BaseUnityPlugin
 {
   internal const string ModName = "Modzified_Cinematics";
-  internal const string ModVersion = "0.1.9";
+  internal const string ModVersion = "0.3.13";
   /// <summary>Jere-style snake_case GUID. Thunderstore author when published: Zeall.</summary>
   internal const string ModGUID = "modzified_cinematics";
 
@@ -31,6 +31,31 @@ public class ModzifiedCinematicsPlugin : BaseUnityPlugin
     }
 
     Log.Log(level, message);
+  }
+
+  private static readonly System.Collections.Generic.HashSet<string> WarnedOnce = new();
+
+  /// <summary>Warning that prints once per YAML reload (host sync and catalog-ready parse the same files several times).</summary>
+  internal static void LogWarnOnce(string message)
+  {
+    lock (WarnedOnce)
+    {
+      if (!WarnedOnce.Add(message))
+      {
+        return;
+      }
+    }
+
+    LogAt(LogLevel.Warning, message);
+  }
+
+  /// <summary>Call when a YAML file change starts a new reload.</summary>
+  internal static void ResetWarnOnce()
+  {
+    lock (WarnedOnce)
+    {
+      WarnedOnce.Clear();
+    }
   }
 
   private readonly Harmony _harmony = new(ModGUID);
@@ -74,6 +99,15 @@ public class ModzifiedCinematicsPlugin : BaseUnityPlugin
       Log.LogError($"Harmony patching failed: {ex}");
     }
 
+    // Manual (not attribute-discovered): targets a compiler-generated nested type by reflection.
+    // See Patches.FejdStartupPatches.PatchIntroFailureLog for why.
+    Patches.FejdStartupPatches.PatchIntroFailureLog(_harmony);
+
+    // Not here: at our own Awake, plugins that load after us aren't in Chainloader.PluginInfos yet
+    // (confirmed 2026-09-22 — Custom Main Menu / Intermission, both loaded later, were invisible).
+    // First Update is safe: Unity runs every object's Awake before any object's first Update.
+    _coexistenceCheckPending = true;
+
     if (IsHeadless)
     {
       LogAt(LogLevel.Info, $"{ModName} v{ModVersion} loaded on dedicated/headless (GUID {ModGUID}).");
@@ -84,9 +118,18 @@ public class ModzifiedCinematicsPlugin : BaseUnityPlugin
     }
   }
 
+  private bool _coexistenceCheckPending;
+
   private void Update()
   {
+    if (_coexistenceCheckPending)
+    {
+      _coexistenceCheckPending = false;
+      CoexistenceCheck.RunOnce();
+    }
+
     CinematicsStore.Tick();
+    LoadingArt.MenuTick();
   }
 
   private void OnDestroy()

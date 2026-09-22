@@ -6,11 +6,47 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ../../.cursor/hooks/guard-mod-feature-build.js"
-          },
+            "command": "node ../../.cursor/hooks/guard-publicized-assemblies-freshness.js"
+          }
+        ]
+      },
+      {
+        "hooks": [
           {
             "type": "command",
-            "command": "node ../../.cursor/hooks/guard-publicized-assemblies-freshness.js"
+            "command": "node ../../.cursor/hooks/guard-drift-allow.js"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../.cursor/hooks/guard-drift-session-start.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../.cursor/hooks/guard-drift-stamp-writer.js"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../.cursor/hooks/guard-drift-session-start.js"
           }
         ]
       }

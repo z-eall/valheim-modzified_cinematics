@@ -3,13 +3,32 @@
   "hooks": {
     "preToolUse": [
       {
-        "command": "node ../../.cursor/hooks/guard-mod-feature-build.js",
+        "command": "node ../../.cursor/hooks/guard-publicized-assemblies-freshness.js",
+        "matcher": "Shell",
+        "failClosed": false
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "node ../../.cursor/hooks/guard-drift-session-start.js",
+        "failClosed": false
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "node ../../.cursor/hooks/guard-drift-cursor-decompile.js",
+        "matcher": "decompile.ps1",
+        "failClosed": false
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "node ../../.cursor/hooks/guard-drift-stamp-writer.js",
         "matcher": "Shell",
         "failClosed": false
       },
       {
-        "command": "node ../../.cursor/hooks/guard-publicized-assemblies-freshness.js",
-        "matcher": "Shell",
+        "command": "node ../../.cursor/hooks/guard-drift-session-start.js",
         "failClosed": false
       }
     ]

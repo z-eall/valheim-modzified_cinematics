@@ -10,3 +10,4 @@ environment.props
 
 # Build / local playtest copy — not source history
 plugins/
+.valheim-build-stamp.json

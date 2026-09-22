@@ -88,6 +88,11 @@ internal static class VanillaCatalog
     };
   }
 
+  /// <summary>
+  /// SoftRef offline catalog for dedicated / pre-Awake seed (vanilla rows only).
+  /// Runtime SoftRef names from <see cref="CinematicsManager.m_videos"/> when available —
+  /// excludes mod-injected Hidden rows so migrate does not treat customs as vanilla seed.
+  /// </summary>
   internal static IReadOnlyList<string> ResolveNames()
   {
     CinematicsManager? cm = CinematicsManager.s_instance;
@@ -96,10 +101,17 @@ internal static class VanillaCatalog
       List<string> names = new(cm.m_videos.Count);
       foreach (CinematicsManager.VideoEntry entry in cm.m_videos)
       {
-        if (!string.IsNullOrEmpty(entry.m_name))
+        if (string.IsNullOrEmpty(entry.m_name))
         {
-          names.Add(entry.m_name);
+          continue;
         }
+
+        if (CatalogInject.IsInjected(entry.m_name))
+        {
+          continue;
+        }
+
+        names.Add(entry.m_name);
       }
 
       if (names.Count > 0)

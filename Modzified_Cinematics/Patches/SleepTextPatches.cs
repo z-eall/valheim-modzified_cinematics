@@ -9,13 +9,29 @@ namespace Modzified_Cinematics.Patches;
 /// </summary>
 internal static class SleepTextPatches
 {
+  /// <summary>One <c>type: state, sleep</c> pass per bed sleep (SleepText OnEnable can re-run when pause UI flickers).</summary>
+  private static bool _sleepMomentDone;
+
+  [HarmonyPatch(typeof(Player), nameof(Player.SetSleeping))]
+  private static class SetSleepingPatch
+  {
+    [HarmonyPostfix]
+    private static void Postfix(bool sleep)
+    {
+      if (!sleep)
+      {
+        _sleepMomentDone = false;
+      }
+    }
+  }
+
   [HarmonyPatch(typeof(SleepText), "HideZZZ")]
   private static class HideZZZPatch
   {
     [HarmonyPrefix]
     private static bool Prefix()
     {
-      return !ReplaceDreamQueued();
+      return !ShouldHoldSleepUi();
     }
   }
 
@@ -25,24 +41,37 @@ internal static class SleepTextPatches
     [HarmonyPrefix]
     private static bool Prefix(SleepText __instance)
     {
-      if (!ReplaceDreamQueued())
+      // Once per sleep session — SleepText OnEnable re-Invokes this after cinematic Unpause.
+      if (!_sleepMomentDone)
       {
-        return true;
+        _sleepMomentDone = true;
+        // SoftRef dream queue wins this sleep; otherwise type: state, sleep play-now.
+        if (SoftRefDreamReplacePending())
+        {
+          CinematicsManager.OnSleep();
+        }
+        else
+        {
+          TriggerEngine.OnSleepMoment();
+        }
       }
 
-      CinematicsManager.OnSleep();
-
-      SuppressDreamBody(__instance);
-      if (CinematicsManager.IsPlaying())
+      if (ShouldHoldSleepUi())
       {
-        HideZzz(__instance);
-      }
-      else
-      {
-        KeepZzz(__instance);
+        SuppressDreamBody(__instance);
+        if (CinematicsManager.IsPlaying())
+        {
+          HideZzz(__instance);
+        }
+        else
+        {
+          KeepZzz(__instance);
+        }
+
+        return false;
       }
 
-      return false;
+      return true;
     }
   }
 
@@ -59,11 +88,26 @@ internal static class SleepTextPatches
     HideZzz(sleep);
   }
 
-  private static bool ReplaceDreamQueued()
+  private static bool ShouldHoldSleepUi()
   {
+    if (Settings.SkipCustom)
+    {
+      return false;
+    }
+
     if (CinematicsManager.IsStartedPlaying() || CinematicsManager.IsPlaying())
     {
       return true;
+    }
+
+    return SoftRefDreamReplacePending();
+  }
+
+  private static bool SoftRefDreamReplacePending()
+  {
+    if (Settings.SkipCustom)
+    {
+      return false;
     }
 
     string name = CinematicsManager.m_dreamCinematic;
