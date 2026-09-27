@@ -2,7 +2,8 @@
   <PropertyGroup>
     <!-- Copy this file to environment.props and set paths for your machine. environment.props is gitignored. -->
     <ValheimGamePath></ValheimGamePath>
-    <BepInExPath>$(ValheimGamePath)\BepInEx</BepInExPath>
+    <!-- BepInEx is Gale-managed on this machine, not installed into the base game folder — its BepInEx\core is empty. Point at your Gale profile's BepInEx folder instead, e.g. %AppData%\com.kesomannen.gale\valheim\profiles\<profile>\BepInEx. If you run a vanilla/manual BepInEx install, use $(ValheimGamePath)\BepInEx instead. -->
+    <BepInExPath></BepInExPath>
     <CorlibPath>$(ValheimGamePath)\valheim_Data\Managed</CorlibPath>
     <PublicizedAssembliesPath>$(ValheimGamePath)\valheim_Data\Managed\publicized_assemblies</PublicizedAssembliesPath>
     <CopyOutputDLLPath>$(MSBuildThisFileDirectory)..\plugins</CopyOutputDLLPath>
