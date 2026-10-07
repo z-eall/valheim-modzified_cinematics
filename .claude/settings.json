@@ -2,19 +2,10 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "node ../../.cursor/hooks/guard-publicized-assemblies-freshness.js"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ../../.cursor/hooks/guard-drift-allow.js"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/../../.claude/hooks/guard-drift-allow.js\""
           }
         ],
         "matcher": "Bash|PowerShell"
@@ -25,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ../../.cursor/hooks/guard-drift-session-start.js"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/../../.claude/hooks/guard-drift-session-start.js\""
           }
         ]
       }
@@ -35,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ../../.cursor/hooks/guard-drift-stamp-writer.js"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/../../.claude/hooks/guard-drift-stamp-writer.js\""
           }
         ],
         "matcher": "Bash|PowerShell"
@@ -46,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ../../.cursor/hooks/guard-drift-session-start.js"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/../../.claude/hooks/guard-drift-session-start.js\""
           }
         ]
       }
